@@ -1,4 +1,4 @@
-// index.js - Servidor de notificaciones para Railway
+// index.js - Servidor de notificaciones CORREGIDO para Railway
 const express = require('express');
 const admin = require('firebase-admin');
 const cors = require('cors');
@@ -64,7 +64,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Ruta principal para enviar notificaciones
+// 🔧 RUTA PRINCIPAL CORREGIDA PARA tokenFCM
 app.post('/sendNotification', async (req, res) => {
   try {
     // Inicializar Firebase si no está inicializado
@@ -72,14 +72,33 @@ app.post('/sendNotification', async (req, res) => {
       initializeFirebase();
     }
 
-    const { token, title, body, data } = req.body;
+    // 🔄 CAMBIO CRÍTICO: Buscar tokenFCM en lugar de token
+    const { tokenFCM, title, body, data } = req.body;
     
-    // Validar datos requeridos
-    if (!token || !title || !body) {
+    // 📝 LOG PARA DEBUGGING
+    console.log('📥 Datos recibidos:', {
+      tokenFCM: tokenFCM ? `${tokenFCM.substring(0, 20)}...` : 'NO RECIBIDO',
+      title: title || 'NO RECIBIDO',
+      body: body || 'NO RECIBIDO',
+      data: data || 'NO RECIBIDO'
+    });
+    
+    // 🔍 VALIDACIÓN CORREGIDA
+    if (!tokenFCM || !title || !body) {
+      console.log('❌ Validación fallida:', {
+        tokenFCM: !!tokenFCM,
+        title: !!title,
+        body: !!body
+      });
+      
       return res.status(400).json({ 
         success: false, 
-        error: 'Token, title y body son requeridos',
-        received: { token: !!token, title: !!title, body: !!body }
+        error: 'tokenFCM, title y body son requeridos',
+        received: { 
+          tokenFCM: !!tokenFCM, 
+          title: !!title, 
+          body: !!body 
+        }
       });
     }
 
@@ -89,18 +108,18 @@ app.post('/sendNotification', async (req, res) => {
     console.log('📱 Data recibida:', data);
     console.log('🎯 Route extraída:', route);
 
-    // Construir mensaje con route incluida
+    // 🚀 CONSTRUIR MENSAJE CON tokenFCM
     const message = {
       notification: {
         title: title,
         body: body
       },
-      // 🚀 DATA PRINCIPAL CON ROUTE GARANTIZADA
+      // DATA PRINCIPAL CON ROUTE GARANTIZADA
       data: {
         ...data,  // Incluir toda la data original
         route: route  // Asegurar que route esté presente
       },
-      token: token,
+      token: tokenFCM, // 🔄 USAR tokenFCM AQUÍ
       android: {
         priority: 'high',
         notification: {
@@ -135,7 +154,7 @@ app.post('/sendNotification', async (req, res) => {
       );
     }
 
-    console.log('📱 Enviando notificación a token:', token.substring(0, 20) + '...');
+    console.log('📱 Enviando notificación a token:', tokenFCM.substring(0, 20) + '...');
     console.log('📋 Data final a enviar:', message.data);
     
     // Enviar notificación
@@ -147,6 +166,7 @@ app.post('/sendNotification', async (req, res) => {
       success: true, 
       response: response,
       message: 'Notificación enviada correctamente',
+      token_usado: `${tokenFCM.substring(0, 20)}...`, // Para debugging
       data_sent: message.data, // Para verificar que se envió la data con route
       timestamp: new Date().toISOString()
     });
@@ -178,19 +198,20 @@ app.post('/sendNotification', async (req, res) => {
   }
 });
 
-// Ruta para envío masivo (opcional)
+// 🔧 RUTA PARA ENVÍO MASIVO TAMBIÉN CORREGIDA
 app.post('/sendBulkNotifications', async (req, res) => {
   try {
     if (!firebaseInitialized) {
       initializeFirebase();
     }
 
-    const { tokens, title, body, data } = req.body;
+    // 🔄 CAMBIO: Buscar tokensFCM en lugar de tokens
+    const { tokensFCM, title, body, data } = req.body;
     
-    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
+    if (!tokensFCM || !Array.isArray(tokensFCM) || tokensFCM.length === 0) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Array de tokens es requerido' 
+        error: 'Array de tokensFCM es requerido' 
       });
     }
 
@@ -199,16 +220,28 @@ app.post('/sendBulkNotifications', async (req, res) => {
       data: data ? Object.fromEntries(
         Object.entries(data).map(([key, value]) => [key, String(value)])
       ) : {},
-      android: { priority: 'high' },
-      apns: { headers: { 'apns-priority': '10' } }
+      android: { 
+        priority: 'high',
+        notification: {
+          sound: 'soycrea.mp3'
+        }
+      },
+      apns: { 
+        headers: { 'apns-priority': '10' },
+        payload: {
+          aps: {
+            sound: 'soycrea.mp3'
+          }
+        }
+      }
     };
 
     const response = await admin.messaging().sendMulticast({
       ...message,
-      tokens: tokens
+      tokens: tokensFCM // 🔄 USAR tokensFCM
     });
 
-    console.log(`📱 Enviadas ${response.successCount}/${tokens.length} notificaciones`);
+    console.log(`📱 Enviadas ${response.successCount}/${tokensFCM.length} notificaciones`);
     
     res.status(200).json({ 
       success: true, 
@@ -222,6 +255,50 @@ app.post('/sendBulkNotifications', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: error.message 
+    });
+  }
+});
+
+// 🆕 RUTA ADICIONAL PARA TESTING
+app.post('/test-notification', async (req, res) => {
+  try {
+    const { tokenFCM } = req.body;
+    
+    if (!tokenFCM) {
+      return res.status(400).json({
+        success: false,
+        error: 'tokenFCM es requerido para el test'
+      });
+    }
+
+    console.log('🧪 Enviando notificación de prueba...');
+    
+    const testMessage = {
+      notification: {
+        title: '🧪 Notificación de Prueba',
+        body: 'Si recibes esto, el sistema funciona correctamente'
+      },
+      data: {
+        type: 'test',
+        route: '/test',
+        timestamp: new Date().toISOString()
+      },
+      token: tokenFCM
+    };
+
+    const response = await admin.messaging().send(testMessage);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Notificación de prueba enviada',
+      response: response
+    });
+
+  } catch (error) {
+    console.error('❌ Error en notificación de prueba:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -244,4 +321,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
   console.log(`🌐 URL base: http://localhost:${PORT}`);
   console.log(`📱 Endpoint notificaciones: POST /sendNotification`);
+  console.log(`🧪 Endpoint de prueba: POST /test-notification`);
+  console.log(`📨 Endpoint masivo: POST /sendBulkNotifications`);
 });
